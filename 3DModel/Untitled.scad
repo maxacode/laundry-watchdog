@@ -1,5 +1,5 @@
 /* 
-   Smart Washer Sensor Enclosure
+   Smart Washer Sensor Enclosure - V2 (Low Profile)
    Raspberry Pi Pico W + MPU-6050
 */
 
@@ -10,40 +10,46 @@ $fn = 64; // High resolution for smooth cylinders
 // ==========================================
 
 // Printer Tolerances
-clearance = 0.4;    // Adds wiggle room for sliding lid
+clearance = 0.2;    // Tightened for dovetail sliding lid
 wall = 2.0;         // Wall thickness
 bottom_thick = 2.0; // Floor thickness
 
 // Magnet Dimensions (2x 10mm x 1.75mm)
-mag_dia = 10.4;     // Slightly oversized for easy gluing
-mag_depth = 1.85;   // Flush recess depth
+mag_dia = 10.4;     
+mag_depth = 1.85;   
 
 // Pico W Dimensions (Standard)
 pico_l = 51.0;
 pico_w = 21.0;
 pico_hole_pitch_l = 47.0; // Distance between holes length-wise
 pico_hole_pitch_w = 17.0; // Distance between holes width-wise
-pico_peg_dia = 1.8;       // Fit inside 2.1mm Pico holes
+pico_peg_dia = 1.9;       // Slightly smaller for easier fit into 2.1mm holes
 
 // Sensor Dimensions (34x16x10mm)
 sens_l = 34.0;
 sens_w = 16.0;
-sens_peg_dia = 2.6;       // Fit inside 3.0mm holes
-// IMPORTANT: Measure the distance between the two holes on your exact module
-sens_hole_pitch = 10.0;   // <--- CHANGE THIS based on your sensor
-sens_hole_x_offset = 31.0; // Distance from front edge to the holes
+sens_peg_dia = 2.7;       
+sens_hole_pitch = 10.0;   // <--- Adjust based on your specific MPU-6050
+sens_hole_x_offset = 31.0; 
 
 // Internal Case Dimensions
-int_l = pico_l + 4;               // 55mm internal length
-int_w = pico_w + sens_w + 10;     // 47mm internal width (5mm gap + margins)
-int_h = 22.0;                     // Generous height for wiring and 10mm sensor
+int_l = 55.0;                     
+int_w = pico_w + sens_w + 12.0;   // Expanded slightly to give boards breathing room
+int_h = 9.0;                      // Reduced to ~40% of original height
+
+// Board Positioning (Offsets from internal walls)
+board_x = wall + 0.5; // 0.5mm from front wall so USB reaches the edge
+board_y = wall + 3.0; // 3.0mm from left wall to clear the pins
+
+sensor_x = wall + 10.0;
+sensor_y = board_y + pico_w + 4.0; 
 
 // ==========================================
 // GENERATION MODULES
 // ==========================================
 
 // Move lid to the side for printing
-translate([0, int_w + 15, 0]) 
+translate([0, int_w + 20, 0]) 
     case_lid();
 
 case_body();
@@ -57,66 +63,67 @@ module case_body() {
         translate([wall, wall, bottom_thick])
             cube([int_l, int_w, int_h + 1]);
             
-        // 3. Sliding lid rail grooves (Left and Right walls)
-        translate([wall, wall/2, int_h + bottom_thick - 2])
-            cube([int_l + wall + 1, int_w + wall, 2.5]); 
+        // 3. Dovetail Sliding Rail Grooves
+        dovetail_groove_cut();
             
         // 4. Open the back wall completely for the lid to enter
-        translate([int_l + wall, wall/2, int_h + bottom_thick - 2])
-            cube([wall + 1, int_w + wall, 5]); 
+        translate([int_l + wall - 1, wall/2, int_h + bottom_thick - 2.5])
+            cube([wall + 2, int_w + wall, 5]); 
             
-        // 5. Pico USB Cutout 
-        // Centered on the Pico's Y position
-        translate([-1, wall + (pico_w/2) - 4.5, bottom_thick + 2.5])
-            cube([wall + 2, 9.0, 7.0]);
+        // 5. Pico USB Cutout (Linked exactly to board placement)
+        usb_y = board_y + (pico_w / 2);
+        translate([-1, usb_y - 5.0, bottom_thick + 1.5])
+            cube([wall + 2, 10.0, 7.0]);
             
         // 6. Magnet Recesses on the underside
-        // Front Magnet
         translate([12, (int_w + wall*2)/2, -0.01])
             cylinder(d=mag_dia, h=mag_depth);
-        // Back Magnet
         translate([(int_l + wall*2) - 12, (int_w + wall*2)/2, -0.01])
             cylinder(d=mag_dia, h=mag_depth);
     }
     
     // Add Pico W Mounting Pegs
-    translate([wall + 2, wall, bottom_thick]) {
+    translate([board_x, board_y, bottom_thick]) {
         pico_pegs();
     }
     
     // Add Sensor Mounting Pegs
-    // Placed next to the Pico with a 5mm gap
-    translate([wall + 2, wall + pico_w + 5, bottom_thick]) {
+    translate([sensor_x, sensor_y, bottom_thick]) {
         sensor_pegs();
     }
 }
 
+module dovetail_groove_cut() {
+    // Cuts a trapezoidal groove into the side walls for the lid
+    hull() {
+        // Top opening (narrow)
+        translate([-1, wall - 0.5, int_h + bottom_thick - 0.01])
+            cube([int_l + wall + 2, int_w + 1.0, 0.1]);
+        // Base of the dovetail (wide)
+        translate([-1, wall/2, int_h + bottom_thick - 2.5])
+            cube([int_l + wall + 2, int_w + wall, 0.1]);
+    }
+}
+
 module pico_pegs() {
-    // Pico holes are inset 2mm from the edges
-    x_inset = (pico_l - pico_hole_pitch_l) / 2;
-    y_inset = (pico_w - pico_hole_pitch_w) / 2;
-    
+    // Exact hole coordinates relative to Pico's bottom-left corner
     peg_positions = [
-        [x_inset, y_inset],
-        [x_inset + pico_hole_pitch_l, y_inset],
-        [x_inset, y_inset + pico_hole_pitch_w],
-        [x_inset + pico_hole_pitch_l, y_inset + pico_hole_pitch_w]
+        [2.0, 2.0],
+        [2.0 + pico_hole_pitch_l, 2.0],
+        [2.0, 2.0 + pico_hole_pitch_w],
+        [2.0 + pico_hole_pitch_l, 2.0 + pico_hole_pitch_w]
     ];
     
     for (pos = peg_positions) {
         translate([pos[0], pos[1], 0]) {
-            // Base standoff to lift PCB
-            cylinder(d=5.0, h=2.5);
-            // Alignment nub to slide through PCB hole
-            cylinder(d=pico_peg_dia, h=4.5);
+            cylinder(d=5.0, h=2.5);          // Base standoff
+            cylinder(d=pico_peg_dia, h=4.5); // Alignment nub
         }
     }
 }
 
 module sensor_pegs() {
-    // Two holes located on one side
     y_center = sens_w / 2;
-    
     peg_positions = [
         [sens_hole_x_offset, y_center - (sens_hole_pitch/2)],
         [sens_hole_x_offset, y_center + (sens_hole_pitch/2)]
@@ -124,27 +131,30 @@ module sensor_pegs() {
     
     for (pos = peg_positions) {
         translate([pos[0], pos[1], 0]) {
-            // Base standoff
             cylinder(d=5.5, h=2.5);
-            // Alignment nub
             cylinder(d=sens_peg_dia, h=4.5);
         }
     }
-    
-    // Add a blank support standoff at the other end so the board doesn't tilt
-    translate([2, y_center, 0])
+    // Blank support standoff at the other end
+    translate([3.0, y_center, 0])
         cylinder(d=5.5, h=2.5);
 }
 
 module case_lid() {
-    // Lid is slightly narrower and shorter than the grooves to slide easily
-    lid_l = int_l + wall - clearance;
-    lid_w = int_w + wall - clearance*2;
-    lid_h = 2.0; // 2mm thick lid
+    lid_l = int_l + wall - 1.0; 
     
-    cube([lid_l, lid_w, lid_h]);
+    // The lid prints flat (upside down relative to how it slides in)
+    // The wide bottom provides a clean first layer on the build plate.
+    hull() {
+        // Wide part (prints against the bed)
+        translate([0, wall/2 + clearance, 0])
+            cube([lid_l, int_w + wall - 2*clearance, 0.1]);
+        // Narrow part (top of the print)
+        translate([0, wall - 0.5 + clearance, 2.5 - clearance])
+            cube([lid_l, int_w + 1.0 - 2*clearance, 0.1]);
+    }
     
-    // Add a small pull tab to the back edge for easy removal
-    translate([lid_l - 4, lid_w/2 - 5, lid_h])
-        cube([4, 10, 2]);
+    // Pull tab for easy removal
+    translate([lid_l - 4.0, wall + int_w/2 - 5.0, 2.5 - clearance])
+        cube([4.0, 10.0, 2.0]);
 }

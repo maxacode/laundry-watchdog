@@ -68,11 +68,27 @@ def _i2c_id_for_pins(sda, scl):
 def make_mpu(cfg):
     sda = int(cfg["i2c_sda"])
     scl = int(cfg["i2c_scl"])
+    freq = int(cfg.get("i2c_freq", 400000))
+    addr = int(cfg.get("mpu_addr", 0x68))
     i2c = I2C(
         _i2c_id_for_pins(sda, scl),
         sda=Pin(sda),
         scl=Pin(scl),
-        freq=int(cfg.get("i2c_freq", 400000)),
+        freq=freq,
     )
-    addr = int(cfg.get("mpu_addr", 0x68))
-    return MPU6050(i2c, addr=addr)
+    found = i2c.scan()
+    if addr not in found:
+        found_hex = " ".join("0x%02x" % a for a in found) or "(none)"
+        raise OSError(
+            "MPU not responding at 0x%02x on SDA=GP%d SCL=GP%d @ %d Hz; "
+            "I2C scan=%s. Check VCC=3V3, GND, SDA/SCL wiring, and AD0→GND "
+            "for address 0x68."
+            % (addr, sda, scl, freq, found_hex)
+        )
+    try:
+        return MPU6050(i2c, addr=addr)
+    except OSError as exc:
+        raise OSError(
+            "MPU present at 0x%02x but init failed on SDA=GP%d SCL=GP%d: %s"
+            % (addr, sda, scl, exc)
+        )

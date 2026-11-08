@@ -5,3 +5,7 @@ __pycache__/
 firmware/
 *.uf2
 config.json
+error.log
+cycle.log
+error_log.html
+.error_log_server.pid

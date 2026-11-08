@@ -48,7 +48,7 @@ def build_payload(cfg, status):
     if status not in STATUS_MESSAGES:
         raise ValueError("status must be COMPLETE or STARTED, got %r" % status)
     return {
-        "device_id": cfg.get("device_id") or "washer_main",
+        "device_id": cfg.get("device_id") or "washer-01",
         "status": status,
         "message": STATUS_MESSAGES[status],
         "timestamp": _timestamp(),
@@ -90,30 +90,46 @@ def _parse_url(url):
     return scheme, host, port, path
 
 
-def post_json(url, payload, timeout_s=20):
+def post_json(url, payload, timeout_s=20, secret=None):
     """HTTP(S) POST JSON body. Returns status code int."""
     scheme, host, port, path = _parse_url(url)
     body = json.dumps(payload)
     if isinstance(body, str):
         body = body.encode("utf-8")
 
-    req = (
-        "POST %s HTTP/1.0\r\n"
-        "Host: %s\r\n"
-        "User-Agent: pico-w-laundry/1.0\r\n"
-        "Content-Type: application/json\r\n"
-        "Content-Length: %d\r\n"
-        "Connection: close\r\n"
-        "\r\n"
-    ) % (path, host, len(body))
+    headers = [
+        "POST %s HTTP/1.1" % path,
+        "Host: %s" % host,
+        "User-Agent: pico-w-laundry/1.0",
+        "Content-Type: application/json",
+        "Content-Length: %d" % len(body),
+        "Connection: close",
+    ]
+    if secret:
+        headers.append("x-device-secret: %s" % secret)
+    req = "\r\n".join(headers) + "\r\n\r\n"
 
     addr = socket.getaddrinfo(host, port)[0][-1]
     raw = socket.socket()
     raw.settimeout(timeout_s)
     raw.connect(addr)
-    sock = ssl.wrap_socket(raw) if scheme == "https" else raw
+    if scheme == "https":
+        # Cloudflare and most CDNs require SNI (server_hostname).
+        # Pico CA store is limited; skip verify so handshake can complete.
+        try:
+            sock = ssl.wrap_socket(
+                raw,
+                server_hostname=host,
+                cert_reqs=ssl.CERT_NONE,
+            )
+        except TypeError:
+            # Older MicroPython builds may not accept those kwargs.
+            sock = ssl.wrap_socket(raw, server_hostname=host)
+    else:
+        sock = raw
     try:
-        sock.write(req.encode("utf-8") + body)
+        sock.write(req.encode("utf-8") if isinstance(req, str) else req)
+        sock.write(body)
         # Read status line only; ignore the rest.
         data = b""
         while b"\r\n" not in data and len(data) < 512:
@@ -138,8 +154,11 @@ def notify_status(cfg, status):
     url = (cfg.get("webhook_url") or "").strip()
     if not url:
         raise ValueError("webhook_url missing in config")
+    secret = (cfg.get("webhook_secret") or "").strip()
+    if not secret:
+        raise ValueError("webhook_secret missing in config")
     payload = build_payload(cfg, status)
-    code = post_json(url, payload)
+    code = post_json(url, payload, secret=secret)
     print("Webhook %s -> HTTP %s" % (status, code))
     if code < 200 or code >= 300:
         raise OSError("Webhook HTTP %s for %s" % (code, status))
@@ -165,8 +184,13 @@ def notify_test(cfg=None):
 
 
 if __name__ == "__main__":
+    from error_log import log_error
     from wifi_connect import connect_wifi
 
     cfg = load_config()
-    connect_wifi(cfg)
-    notify_test(cfg)
+    try:
+        connect_wifi(cfg)
+        notify_test(cfg)
+    except Exception as exc:
+        log_error("notify_test", "failed", exc)
+        raise

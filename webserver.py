@@ -5,14 +5,19 @@ import socket
 import time
 
 from config_store import load_config, save_config
+from cycle_log import read_log as read_cycle_log
+from error_log import read_log
 
 EDITABLE_KEYS = [
     "wifi_ssid",
     "wifi_password",
     "webhook_url",
+    "webhook_secret",
     "device_id",
     "vibration_threshold",
-    "stillness_timeout_ms",
+    "stillness_timeout_min",
+    "start_timer_s",
+    "cycle_log_interval_s",
     "sample_interval_ms",
     "i2c_sda",
     "i2c_scl",
@@ -37,7 +42,9 @@ def _page(cfg, status="", ip=""):
     rows = []
     for key in EDITABLE_KEYS:
         val = cfg.get(key, "")
-        input_type = "password" if "password" in key else "text"
+        input_type = (
+            "password" if ("password" in key or "secret" in key) else "text"
+        )
         rows.append(
             '<label>%s<br><input name="%s" type="%s" value="%s" '
             'style="width:100%%"></label><br><br>'
@@ -51,15 +58,17 @@ def _page(cfg, status="", ip=""):
         "<style>body{font-family:sans-serif;max-width:520px;margin:1.5rem auto;"
         "padding:0 1rem}input,textarea{font:inherit;padding:.4rem}"
         "button{padding:.6rem 1rem;font:inherit}.ok{color:green}.err{color:#b00}"
-        "</style></head><body>"
+        "a{color:#06c}</style></head><body>"
         "<h1>Laundry Monitor</h1>"
         "<p>IP: %s</p>"
         "<p class='%s'>%s</p>"
+        "<p><a href='/api/cycle-log'><strong>Cycle log</strong></a> · "
+        "<a href='/api/errors'><strong>Error log</strong></a> · "
+        "<a href='/api/config'>Raw JSON</a></p>"
         "<form method='POST' action='/save'>"
         "%s"
         "<button type='submit'>Save config</button>"
         "</form>"
-        "<p><a href='/api/config'>Raw JSON</a></p>"
         "</body></html>"
     ) % (
         _html_escape(ip or "?"),
@@ -101,9 +110,10 @@ def _urldecode(text):
 
 def _coerce(cfg, form):
     updated = dict(cfg)
-    float_keys = {"vibration_threshold"}
+    float_keys = {"vibration_threshold", "stillness_timeout_min"}
     int_keys = {
-        "stillness_timeout_ms",
+        "start_timer_s",
+        "cycle_log_interval_s",
         "sample_interval_ms",
         "i2c_sda",
         "i2c_scl",
@@ -201,10 +211,14 @@ class ConfigServer:
     def _handle(self, method, path, body):
         cfg = load_config()
         status_info = self.get_status()
-        status_note = "state=%s vibration=%.4f" % (
+        status_note = "state=%s vibration=%.4f mpu_ok=%s" % (
             status_info.get("state", "?"),
             float(status_info.get("vibration", 0.0)),
+            status_info.get("mpu_ok", False),
         )
+        last_error = status_info.get("last_error") or ""
+        if last_error:
+            status_note = "%s | ERROR: %s" % (status_note, last_error)
 
         if path.startswith("/api/config"):
             payload = dict(cfg)
@@ -214,6 +228,14 @@ class ConfigServer:
                 json.dumps(payload),
                 "application/json",
             )
+
+        if path.startswith("/api/errors"):
+            text = read_log() or "(no errors logged yet)\n"
+            return _http_response("200 OK", text, "text/plain; charset=utf-8")
+
+        if path.startswith("/api/cycle-log"):
+            text = read_cycle_log() or "(no cycle events logged yet)\n"
+            return _http_response("200 OK", text, "text/plain; charset=utf-8")
 
         if method == "POST" and path.startswith("/save"):
             try:

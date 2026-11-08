@@ -6,6 +6,7 @@ source .venv/bin/activate
 
 FILES=(
   config_store.py
+  error_log.py
   mpu6050.py
   wifi_connect.py
   notification.py
@@ -20,4 +21,7 @@ for f in "${FILES[@]}"; do
 done
 
 mpremote connect auto reset
-echo "Deployed. Onboard LED should blink every 2s when healthy."
+echo "Deployed. Waiting for boot errors..."
+sleep 4
+./fetch_error_log.sh
+echo "Onboard LED should blink every 2s when healthy."

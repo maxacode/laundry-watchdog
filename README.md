@@ -26,6 +26,7 @@ No third-party MPU package is required. This repo includes:
 | `wifi_connect.py` | Wi-Fi connect |
 | `webserver.py` | Local config HTTP UI |
 | `notification.py` | Webhook JSON POST |
+| `error_log.py` | Append timestamped errors to `error.log` |
 | `main.py` | State machine + LED + orchestration |
 | `config.example.json` | Template for local `config.json` |
 
@@ -48,14 +49,15 @@ Set at least:
 
 - `wifi_ssid` / `wifi_password`
 - `webhook_url` — HTTPS or HTTP endpoint that accepts JSON POSTs
-- Optional `device_id` (default `washer_main`)
-- Tune `vibration_threshold` and `stillness_timeout_ms` (default 10 minutes)
+- `webhook_secret` — sent as `x-device-secret` header
+- `device_id` (use `washer-01` for the registered washer)
+- Tune `vibration_threshold`, `stillness_timeout_min` (default 10), and `start_timer_s` (default 60)
 
 Webhook payload:
 
 ```json
 {
-  "device_id": "washer_main",
+  "device_id": "washer-01",
   "status": "COMPLETE",
   "message": "The washing machine cycle has finished",
   "timestamp": "uptime_ms:12345"
@@ -80,7 +82,15 @@ Wi-Fi / sensor / notify errors: **fast blink**.
 
 After Wi-Fi connects, open `http://<pico-ip>/` on your LAN.  
 View/edit settings and Save. Reboot after Wi-Fi or I2C pin changes.  
-JSON: `http://<pico-ip>/api/config`
+JSON: `http://<pico-ip>/api/config`  
+Error log: `http://<pico-ip>/api/errors` (also on-device as `error.log`)
+
+```bash
+./fetch_error_log.sh   # pull into ./error.log and open in browser
+mpremote connect auto cat :error.log
+```
+
+`./deploy.sh` fetches and opens the log automatically after reboot.
 
 ## 5. Test notifications alone
 
@@ -96,11 +106,12 @@ mpremote connect auto run notification.py
 
 ## State machine
 
-1. Vibration ≥ threshold → `RUNNING` → webhook `STARTED`
-2. Drops below threshold → `QUIET`, start stillness timer
-3. Vibration returns before timeout → back to `RUNNING`, timer reset
-4. Still for `stillness_timeout_ms` → `COMPLETE` → webhook `COMPLETE`
-5. New vibration after complete → `STARTED` again
+1. Vibration ≥ threshold → `STARTING` (must stay above threshold for `start_timer_s`, default 60s)
+2. Steady long enough → `RUNNING` → webhook `STARTED` (drop during STARTING returns to `IDLE`)
+3. Drops below threshold → `QUIET`, start stillness timer
+4. Vibration returns before timeout → back to `RUNNING`, timer reset
+5. Still for `stillness_timeout_min` → `COMPLETE` → webhook `COMPLETE`
+6. After complete, another steady `start_timer_s` of vibration → `STARTED` again
 
 ## LED
 
