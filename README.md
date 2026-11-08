@@ -1,6 +1,6 @@
-# Pico W laundry monitor (MicroPython)
+# Laundry Watchdog
 
-Detects washer/dryer start and finish from GY-521 (MPU-6050) vibration, then POSTs JSON to your webhook. Includes a local config web UI.
+Raspberry Pi Pico W laundry monitor. Detects washer/dryer start and finish from GY-521 (MPU-6050) vibration, then POSTs JSON to your webhook. Includes a local config web UI.
 
 ## Wiring (GY-521 → Pico W)
 
@@ -21,24 +21,30 @@ No third-party MPU package is required. This repo includes:
 
 | File | Role |
 |------|------|
-| `mpu6050.py` | MPU-6050 driver (upload this) |
+| `mpu6050.py` | MPU-6050 driver |
 | `config_store.py` | Load/save `config.json` |
 | `wifi_connect.py` | Wi-Fi connect |
 | `webserver.py` | Local config HTTP UI |
 | `notification.py` | Webhook JSON POST |
 | `main.py` | State machine + LED + orchestration |
-| `config.json` | All tunables (read at boot) |
+| `config.example.json` | Template for local `config.json` |
 
 Built-in MicroPython modules used: `machine`, `network`, `socket`, `ssl`/`ussl`, `json`, `time`, `struct`.
 
 ## 1. Flash MicroPython (once)
 
 1. Hold **BOOTSEL**, plug USB, release → `RPI-RP2` drive.
-2. Copy `firmware/RPI_PICO_W-*.uf2` onto the drive.
+2. Copy a Pico W MicroPython `.uf2` onto the drive (keep firmware locally; it is not in this repo).
 
-## 2. Edit `config.json`
+## 2. Create `config.json`
 
-Fill in at least:
+Copy the example and fill in your secrets locally (never commit `config.json`):
+
+```bash
+cp config.example.json config.json
+```
+
+Set at least:
 
 - `wifi_ssid` / `wifi_password`
 - `webhook_url` — HTTPS or HTTP endpoint that accepts JSON POSTs
@@ -61,7 +67,9 @@ Webhook payload:
 ## 3. Deploy
 
 ```bash
+python3 -m venv .venv
 source .venv/bin/activate
+pip install -r requirements.txt
 ./deploy.sh
 ```
 
