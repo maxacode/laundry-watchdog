@@ -1,0 +1,17 @@
+{
+  "wifi_ssid": "YOUR_WIFI_SSID",
+  "wifi_password": "YOUR_WIFI_PASSWORD",
+  "wifi_ip": "",
+  "webhook_url": "https://example.com/webhook",
+  "device_id": "washer_main",
+
+  "vibration_threshold": 0.12,
+  "stillness_timeout_ms": 600000,
+  "sample_interval_ms": 100,
+  "i2c_sda": 4,
+  "i2c_scl": 5,
+  "i2c_freq": 400000,
+  "mpu_addr": 104,
+  "led_ok_period_ms": 2000,
+  "led_error_period_ms": 150
+}
